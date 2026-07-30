@@ -42,6 +42,26 @@ def extraer_texto_pdf(ruta):
     return paginas
 
 
+def extraer_texto_txt(ruta):
+    """Lee archivos .txt exportados con marcadores '<<<PAGINA N>>>' entre páginas."""
+    with open(ruta, "r", encoding="utf-8") as f:
+        contenido = f.read()
+
+    paginas = []
+    bloques = contenido.split("<<<PAGINA ")
+    for bloque in bloques:
+        if not bloque.strip():
+            continue
+        try:
+            num_str, resto = bloque.split(">>>", 1)
+            num_pagina = int(num_str.strip())
+        except ValueError:
+            continue
+        if resto.strip():
+            paginas.append((num_pagina, resto))
+    return paginas
+
+
 def dividir_en_fragmentos(texto, tamano=CHUNK_SIZE, solape=CHUNK_OVERLAP):
     fragmentos = []
     inicio = 0
@@ -55,7 +75,7 @@ def dividir_en_fragmentos(texto, tamano=CHUNK_SIZE, solape=CHUNK_OVERLAP):
 @st.cache_resource(show_spinner="Procesando manuales, esto puede tardar un minuto...")
 def construir_indice():
     embedder = load_embedder()
-    rutas = glob.glob(os.path.join(MANUALES_DIR, "*.pdf"))
+    rutas = glob.glob(os.path.join(MANUALES_DIR, "*.pdf")) + glob.glob(os.path.join(MANUALES_DIR, "*.txt"))
 
     if not rutas:
         return None, [], embedder
@@ -63,7 +83,10 @@ def construir_indice():
     todos_fragmentos = []  # lista de dicts: texto, manual, pagina
     for ruta in rutas:
         nombre_manual = os.path.basename(ruta)
-        paginas = extraer_texto_pdf(ruta)
+        if ruta.lower().endswith(".pdf"):
+            paginas = extraer_texto_pdf(ruta)
+        else:
+            paginas = extraer_texto_txt(ruta)
         for num_pagina, texto_pagina in paginas:
             for frag in dividir_en_fragmentos(texto_pagina):
                 if frag.strip():
@@ -116,8 +139,8 @@ embeddings, fragmentos, embedder = construir_indice()
 
 if embeddings is None:
     st.warning(
-        f"No se encontraron manuales PDF en la carpeta '{MANUALES_DIR}/'. "
-        "Sube tus manuales en formato PDF a esa carpeta en el repositorio de GitHub."
+        f"No se encontraron manuales (PDF o TXT) en la carpeta '{MANUALES_DIR}/'. "
+        "Sube tus manuales a esa carpeta en el repositorio de GitHub."
     )
     st.stop()
 
